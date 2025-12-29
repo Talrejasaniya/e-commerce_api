@@ -1,8 +1,10 @@
-from fastapi import FastAPI,Depends,HTTPException
+from fastapi import FastAPI,Depends,HTTPException, Response,status
 from pydantic import BaseModel
 from database import engine,Base,SessionLocal
-import models
+from utils import hash_password
 from sqlalchemy.orm import Session
+import models,utils,schemas
+from sqlalchemy.exc import IntegrityError
 
 models.Base.metadata.create_all(bind=engine)
 app=FastAPI()
@@ -75,3 +77,40 @@ def update_product(product_id:int,item:Product,db:Session=Depends(get_db)):
     db.commit()
     
     return product_query.first()
+
+#signup endpoint
+@app.post("/users",status_code=status.HTTP_201_CREATED, response_model=schemas.UserOut)
+def create_user(user: schemas.UserCreate,db:Session=Depends(get_db)):
+    hashed_pwd=utils.hash_password(user.password)
+    user.password=hashed_pwd
+    new_user=models.User(**user.dict())
+    try:
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Email already registered")
+    
+    return new_user
+
+@app.post("/login")
+def login(user_credentials:schemas.UserLogin,db:Session=Depends(get_db)):
+    user=db.query(models.User).filter(models.User.email==user_credentials.email).first()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid Credentials"
+        )
+        
+    if not utils.verify_password(user_credentials.password,user.password):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid Credentials"
+        )
+        
+    return {"message": "Login Successful!"}
+    
