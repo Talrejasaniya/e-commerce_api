@@ -1,7 +1,7 @@
 from fastapi import FastAPI,Depends,HTTPException, Response,status
 from pydantic import BaseModel
 from database import engine,Base,SessionLocal
-from utils import hash_password
+from utils import hash_password,verify_password, create_access_token
 from sqlalchemy.orm import Session
 import models,utils,schemas
 from sqlalchemy.exc import IntegrityError
@@ -111,6 +111,7 @@ def login(user_credentials:schemas.UserLogin,db:Session=Depends(get_db)):
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Invalid Credentials"
         )
-        
-    return {"message": "Login Successful!"}
+    
+    access_token = create_access_token(data={"user_id": user.id})   
+    return {"access_token": access_token, "token_type": "bearer"}
     
